@@ -1,84 +1,223 @@
 /* ---------- Struct ---------- */ 
 
-// struct, farklý tipteki verileri tek bir mantýksal yapý altýnda toplamak için kullanýlýr. Gömülü sistemlerde bu genellikle peripheral, sensör veya konfigürasyon modeli anlamýna gelir.
+/* struct, farklý tipteki verileri tek bir mantýksal yapý altýnda toplamak için kullanýlýr. Gömülü sistemlerde bu genellikle peripheral, sensör veya konfigürasyon modeli anlamýna gelir. */
 struct SensorData
 {
-    uint16_t raw;             // ADC’den okunan ham deðer
-    float voltage;            // Hesaplanan voltaj
-    uint8_t status;           // Sensör durumu
+    uint16_t raw;             
+    float voltage;            
+    uint8_t status;           
 };
 
 // struct Deðiþkeni Tanýmlama ve Kullanma
-struct SensorData sensor1;    // SensorData tipinde deðiþken
+struct SensorData sensor1;    
 
-sensor1.raw = 2000;           // Struct üyesine eriþim
-sensor1.voltage = 1.65f;      // Nokta (.) operatörü kullanýlýr
-sensor1.status = 1;           // Sensör aktif
+sensor1.raw = 2000;           
+sensor1.voltage = 1.65f;      
+sensor1.status = 1;           
 
-// typedef ile Daha Okunabilir Struct Tanýmý. STM32 projelerinde standart kullaným þeklidir.
+
+/* typedef ile Daha Okunabilir Struct Tanýmý */
 typedef struct
 {
-    uint16_t raw;             // ADC ham veri
-    float voltage;            // Voltaj deðeri
-    uint8_t status;           // Sensör durumu
+    uint16_t raw;             
+    float voltage;            
+    uint8_t status;           
 } Sensor_t;
 
-Sensor_t sensor1;             // Artýk struct keyword gerekmez
-sensor1.raw = 3000;           // Üye eriþimi
-sensor1.voltage = 2.4f;       // Hesaplanan deðer
-sensor1.status = 0;           // Sensör pasif
+Sensor_t sensor2;             
+sensor2.raw = 3000;           
+sensor2.voltage = 2.4f;       
+sensor2.status = 0;           
 
-// Struct Pointer Kullanýmý (-> Operatörü). Driver ve HAL fonksiyonlarýnda en sýk kullanýlan yapý.
-Sensor_t sensor1;             // Sensor yapýsý
-Sensor_t *pSensor;            // Sensor yapýsýný gösteren pointer
 
-pSensor = &sensor1;            // Struct adresi pointer’a atanýr
+/* Struct Pointer Kullanýmý (-> Operatörü) */
+Sensor_t sensor3;             
+Sensor_t *pSensor;            
 
-pSensor->raw = 1500;           // Pointer ile struct üyesine eriþim
-pSensor->voltage = 1.2f;       // -> operatörü kullanýlýr
-pSensor->status = 1;           // Sensör aktif
+pSensor = &sensor3;            
 
-// Fonksiyonlara Struct Pointer Gönderme. STM32 driver mimarisinin temelidir.
-void Sensor_Update(Sensor_t *sensor)   // Struct pointer parametre olarak alýnýr
+pSensor->raw = 1500;           
+pSensor->voltage = 1.2f;       
+pSensor->status = 1;           
+
+
+/* Fonksiyonlara Struct Pointer Gönderme */
+void Sensor_Update(Sensor_t *sensor)   
 {
-    sensor->raw = 2048;                // ADC okuma simülasyonu
-    sensor->voltage = 1.65f;           // Voltaj hesaplanýr
-    sensor->status = 1;                // Sensör geçerli
+    if (sensor != 0)                     // Null pointer güvenliði
+    {
+        sensor->raw = 2048;
+        sensor->voltage = 1.65f;
+        sensor->status = 1;
+    }
 }
 
-int main(void)
+
+/* Struct Return Eden Fonksiyon */
+Sensor_t Sensor_Create(void)
 {
-    Sensor_t mySensor;                 // Sensor instance
-    Sensor_Update(&mySensor);           // Adres fonksiyona gönderilir
+    Sensor_t s;
+
+    s.raw = 1000;
+    s.voltage = 0.8f;
+    s.status = 1;
+
+    return s;                           // Küçük struct’lar için uygundur
 }
 
-// Struct ile Peripheral Konfigürasyonu (STM32 Tarzý). HAL yapýlarýna birebir benzer örnek.
+
+/* Struct Ýçinde Struct (Nested Struct) */
 typedef struct
 {
-    uint32_t baudRate;         // UART baud rate
-    uint8_t dataBits;          // Veri bit sayýsý
-    uint8_t stopBits;          // Stop bit sayýsý
+    uint16_t raw;
+    float voltage;
+} ADC_Data_t;
+
+typedef struct
+{
+    ADC_Data_t adc;            // Ýç struct
+    uint8_t status;
+} SensorEx_t;
+
+SensorEx_t sensorEx;
+
+sensorEx.adc.raw = 2500;       
+sensorEx.status = 1;
+
+
+/* Struct Dizisi */
+Sensor_t sensors[3];           
+
+sensors[0].raw = 1000;         
+sensors[1].raw = 2000;         
+sensors[2].raw = 3000;         
+
+
+/* Struct + Loop Kullanýmý (Scan yapýsý) */
+for (int i = 0; i < 3; i++)
+{
+    sensors[i].status = 1;     // Tüm sensörleri aktif et
+}
+
+
+/* Struct Ýçinde Pointer (DMA / Buffer Yönetimi) */
+typedef struct
+{
+    uint8_t *pData;            
+    uint16_t size;             
+} Buffer_t;
+
+uint8_t dataArray[10];
+
+Buffer_t buffer;
+
+buffer.pData = dataArray;      
+buffer.size = sizeof(dataArray);
+
+
+/* Struct ile Peripheral Konfigürasyonu */
+typedef struct
+{
+    uint32_t baudRate;         
+    uint8_t dataBits;          
+    uint8_t stopBits;          
 } UART_Config_t;
 
-UART_Config_t uart1Config;     // UART konfigürasyon yapýsý
+UART_Config_t uart1Config;
 
-uart1Config.baudRate = 115200; // UART hýzý
-uart1Config.dataBits = 8;      // 8-bit veri
-uart1Config.stopBits = 1;      // 1 stop bit
+uart1Config.baudRate = 115200;
+uart1Config.dataBits = 8;
+uart1Config.stopBits = 1;
 
-// Struct Dizisi (Birden Fazla Sensör / Peripheral)
-Sensor_t sensors[3];           // 3 adet sensör yapýsý
 
-sensors[0].raw = 1000;         // Ýlk sensör
-sensors[1].raw = 2000;         // Ýkinci sensör
-sensors[2].raw = 3000;         // Üçüncü sensör
+/* Bit-field Struct (Register Modelleme) */
 
-// Embedded Perspektifinden Neden Struct?
-//STM32 tarafýnda struct kullanýmý: Peripheral konfigürasyonlarý, Driver state yönetimi, Sensör soyutlama, Kod okunabilirliði, Bakým ve geniþletilebilirlik için kritik önemdedir.
-
-// Pointer + Struct = STM32 HAL Mantýðý (Kavramsal). Bu yapý, STM32’nin CMSIS register haritalamasýnýn temel fikridir.
+// Donaným register’larýný bit seviyesinde temsil etmek için kullanýlýr
 typedef struct
 {
-    volatile uint32_t *ODR;    // GPIO Output Data Register adresi
-    volatile uint32_t *IDR;    // GPIO Input Data Register adresi
+    uint32_t EN   : 1;         // Enable biti
+    uint32_t MODE : 2;         // Mode seçimi
+    uint32_t RES  : 29;        // Reserved alan
+} CTRL_Reg_t;
+
+CTRL_Reg_t ctrl;
+
+ctrl.EN = 1;                  // Enable aktif
+ctrl.MODE = 2;                // Mode ayarý
+
+
+/* Packed Struct (Hafýza Optimizasyonu) */
+
+// Padding kaldýrýlýr (protokol frame’leri için önemli)
+typedef struct __attribute__((packed))
+{
+    uint8_t id;
+    uint16_t value;
+} Frame_t;
+
+Frame_t frame;
+
+frame.id = 1;
+frame.value = 100;
+
+
+/* Struct Alignment (Hizalama) */
+
+// CPU eriþim performansý için önemlidir
+typedef struct
+{
+    uint8_t a;
+    uint32_t b;               // Alignment nedeniyle padding oluþur
+} Align_t;
+
+
+/* Pointer + Struct = STM32 HAL Mantýðý */
+
+typedef struct
+{
+    volatile uint32_t *ODR;    
+    volatile uint32_t *IDR;    
 } GPIO_Port_t;
+
+GPIO_Port_t gpioA;
+
+gpioA.ODR = (uint32_t*)0x40020014;
+gpioA.IDR = (uint32_t*)0x40020010;
+
+*(gpioA.ODR) |= (1 << 5);     // Register üzerinden pin set
+
+
+/* Const Struct (Flash’ta Sabit Konfigürasyon) */
+
+const UART_Config_t uartDefault =
+{
+    .baudRate = 9600,
+    .dataBits = 8,
+    .stopBits = 1
+};
+
+
+/* Volatile Struct (ISR ile Paylaþýlan Veri) */
+
+typedef struct
+{
+    volatile uint8_t flag;
+    volatile uint16_t value;
+} ISR_Data_t;
+
+ISR_Data_t isrData;
+
+if (isrData.flag)
+{
+    isrData.flag = 0;          // ISR flag temizleme
+}
+
+
+/* Embedded Perspektif */
+
+// Struct neden kritik?
+// - Peripheral soyutlama (HAL)
+// - Register mapping (CMSIS)
+// - DMA buffer yönetimi
+// - Driver state machine tasarýmý
+// - Kod okunabilirliði ve modülerlik

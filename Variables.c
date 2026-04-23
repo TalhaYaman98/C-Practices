@@ -1,202 +1,185 @@
 /* ---------- Deðiþken tanýmlamalarý ---------- */ 
 
-// Temel Deðiþken Tanýmlamalarý
-int counter;                 // Varsayýlan olarak RAM’de yer alan, iþareti olan tam sayý deðiþken
-unsigned int tick;           // Negatif deðer almayan sayaçlar için tercih edilir
-char rxByte;                 // UART vb. haberleþmelerde tek bayt veri için kullanýlýr
-float temperature;           // Sensörlerden gelen ondalýklý veriler için
+#include <stdint.h>                     // Sabit geniþlikli veri tipleri
 
-// STM32’de Sýk Kullanýlan Sabit Geniþlikli Tipler (stdint.h). Gömülü sistemlerde taþýnabilirlik ve bellek kontrolü için bu tipler kritik önemdedir.
-uint8_t  uartData;            // 8-bit, UART RX/TX için ideal
-uint16_t adcValue;            // 12-bit ADC verileri genelde 16-bit deðiþkende tutulur
-uint32_t systemTick;          // SysTick veya zamanlayýcý sayaçlarý için
-int16_t  motorSpeed;          // Pozitif/negatif yönlü motor hýz bilgisi
 
-// Baþlangýç Deðeri Verilerek Tanýmlama. STM32 tarafýnda ilk deðer verilmemiþ deðiþkenler RAM’de rastgele deðer içerebilir.
-uint8_t ledState = 0;         // LED baþlangýçta kapalý
-uint16_t adcRaw = 0;          // ADC ölçümü baþlamadan önce sýfýrlanýr
-float voltage = 0.0f;         // Hesaplamalarda belirsizlik olmamasý için
+/* --- Temel Deðiþken Tanýmlamalarý --- */
 
-// Global deðiþkenlerin TEK tanýmý 
-uint16_t adcValue = 0;
-volatile uint8_t uartRxFlag = 0;
+int counter;                 // Ýþaretli tam sayý (genelde 32-bit)
+unsigned int tick;           // Negatif olmayan sayaçlar
+char rxByte;                 // 1 byte veri (UART vb.)
+float temperature;           // Ondalýklý veri (FPU yoksa maliyetli)
 
-// Global deðiþkenlerin TEK tanýmý
-extern uint16_t adcValue;          // Baþka .c dosyalarýnda kullanýlan. #include "globals.h" edilmeli.
-extern volatile uint8_t uartRxFlag;
 
-// #include deðiþkeni paylaþmaz, #include sadece bildirimi görünür kýlar. Asýl paylaþýmý saðlayan þey: extern.
-// #include = “Bu bildirimi buraya kopyala”
-// extern = “Tanýmý baþka bir yerde var”
+/* --- STM32’de Sýk Kullanýlan Tipler (stdint.h) --- */
 
-// static global › sadece tanýmlandýðý .c dosyasýnda eriþilebilir
-// Header’a extern yazýlsa bile eriþilemez
-// Modül içi gizleme (encapsulation) için idealdir
+uint8_t  uartData;           
+uint16_t adcValue_local;     
+uint32_t systemTick;         
+int16_t  motorSpeed;         
 
-//---------------------------------------------------------------------------------------------------------------------------------------
 
-// volatile Temel Kullaným
-// volatile ile tanýmlanan deðiþkenler, derleyiciye “bu deðiþken her an dýþ etkenle deðiþebilir” mesajý verir
-// Derleyici bu deðiþkeni cache’lemez, her eriþimde RAM’den okur
-volatile uint8_t uartRxFlag;               // UART interrupt içinde set edilen bayrak
-volatile uint32_t msCounter;               // Timer interrupt ile artan sayaç
+/* --- Baþlangýç Deðeri Verilerek Tanýmlama --- */
 
-// volatile Olmadan Kullaným (Hatalý Senaryo)
-// Derleyici optimizasyonu nedeniyle sonsuz döngü riski oluþur
-uint8_t buttonPressed;                     // ISR içinde deðiþtiriliyor varsayalým
+uint8_t ledState = 0;        
+uint16_t adcRaw = 0;         
+float voltage = 0.0f;        
+
+
+/* --- Global Deðiþken Tanýmý (TEK YERDE) --- */
+
+// globals.c
+uint16_t adcValue = 0;                   
+volatile uint8_t uartRxFlag = 0;         
+
+
+/* --- extern Kullanýmý (Baþka Dosyada) --- */
+
+// globals.h
+// extern uint16_t adcValue;
+// extern volatile uint8_t uartRxFlag;
+
+// #include sadece bildirimi getirir, bellekte yer ayýrmaz
+// extern › "taným baþka yerde" demektir
+
+
+/* --- volatile Temel Kullaným --- */
+
+volatile uint8_t uartRxFlag2;             
+volatile uint32_t msCounter;              
+
+
+/* --- volatile Olmadan (Hatalý Senaryo) --- */
+
+uint8_t buttonPressed;                    
 
 void WaitButton(void)
 {
-    while (buttonPressed == 0)             // ? Compiler bunu sabit kabul edebilir
+    while (buttonPressed == 0)             // Compiler optimize edebilir
     {
-        // Sonsuz döngüye girme riski
+        // Sonsuz döngü riski
     }
 }
 
-// volatile ile Doðru Kullaným
-volatile uint8_t buttonPressedVol;          // ISR tarafýndan deðiþtirilen bayrak
+
+/* --- volatile ile Doðru Kullaným --- */
+
+volatile uint8_t buttonPressedVol;         
 
 void WaitButtonSafe(void)
 {
-    while (buttonPressedVol == 0)           // ? Her döngüde RAM’den okunur
+    while (buttonPressedVol == 0)          
     {
-        // Güvenli bekleme
+        // Her seferinde RAM’den okunur
     }
 }
 
-// volatile ve ISR (Interrupt Service Routine) Kullanýmý
-// ISR içinde deðiþtirilen her global deðiþken volatile OLMALIDIR
+
+/* --- ISR Kullanýmý --- */
+
 void USART1_IRQHandler(void)
 {
-    uartRxFlag = 1;                         // Ana döngüye veri geldi bilgisi verilir
+    uartRxFlag = 1;                       
 }
 
-// volatile ve Donaným Register Mantýðý
-// STM32 register’larý zaten volatile olarak tanýmlýdýr
-#define GPIO_ODR   (*(volatile uint32_t*)0x48000014)  // GPIO output data register
+
+/* --- Donaným Register Eriþimi --- */
+
+#define GPIO_ODR   (*(volatile uint32_t*)0x48000014)
 
 void LedToggle(void)
 {
-    GPIO_ODR ^= (1 << 5);                   // Donaným register doðrudan deðiþtirilir
+    GPIO_ODR ^= (1 << 5);                 
 }
 
-// volatile ve Pointer Kullanýmý
-// Pointer’ýn gösterdiði veri volatile
-volatile uint32_t *timerCnt = (uint32_t*)0x40000024; // Timer counter register
+
+/* --- volatile Pointer Kullanýmý --- */
+
+volatile uint32_t *timerCnt = (uint32_t*)0x40000024;
 
 uint32_t ReadTimer(void)
 {
-    return *timerCnt;                       // Donanýmdan her seferinde okunur
+    return *timerCnt;                     
 }
 
-// volatile Pointer Türleri (Kritik Ayrým)
 
-// 1 Veri volatile, pointer normal
-volatile uint8_t *pVolData;                // Gösterilen veri deðiþken
+/* --- volatile Pointer Türleri --- */
 
-// 2 Pointer volatile, veri normal
-uint8_t * volatile pVolPtr;                // Pointer adresi deðiþebilir (DMA senaryosu)
+volatile uint8_t *pVolData;               
+uint8_t * volatile pVolPtr;               
+volatile uint8_t * volatile pFullVol;     
 
-// 3 Hem pointer hem veri volatile
-volatile uint8_t * volatile pFullVol;      // Donaným + DMA + ISR senaryolarý
 
-// volatile ve const Birlikte Kullanýmý
-// Okunabilir ama dýþ etkenle deðiþebilir veri
-const volatile uint16_t ADC_DR = 0x0000;    // ADC data register simülasyonu
+/* --- const + volatile --- */
 
-// ADC_DR = 100;                            // ? Yazýlamaz
-// Okuma serbest, deðiþim donaným kaynaklý
+const volatile uint16_t ADC_DR = 0x0000;  
 
-// volatile ve Fonksiyon Parametreleri
-// ISR veya donanýmdan gelen pointer’lar volatile olmalýdýr
+// Yazýlamaz, sadece okunur (donaným deðiþtirir)
+
+
+/* --- Fonksiyon Parametresi --- */
+
 void ClearFlag(volatile uint8_t *flag)
 {
-    *flag = 0;                              // Compiler optimizasyonu engellenir
+    if (flag != 0)
+    {
+        *flag = 0;
+    }
 }
 
-// volatile ve extern Kullanýmý
-// Header dosyasýnda:
-// extern volatile uint8_t uartRxFlag;
 
-// Bu .c dosyasýnda tanýmlanýr
-volatile uint8_t uartRxFlag;                // ISR + main loop ortak deðiþken
+/* --- volatile Kritik Not --- */
 
-// volatile Yanlýþ Kullaným Örnekleri
+// volatile = thread-safe DEÐÝLDÝR (atomic deðildir)
 
-// Gereksiz volatile (performans düþürür)
-volatile uint16_t localCounter;             // ? ISR/donaným yoksa gereksiz
 
-// volatile Thread-Safe DEÐÝLDÝR
-// Atomic iþlem saðlamaz, sadece optimizasyonu engeller
+/* --- const Temel Kullaným --- */
 
-// Embedded Kritik Notlar
-/*
-- ISR içinde deðiþtirilen TÜM global deðiþkenler volatile olmalý
-- Donaným register eriþimleri volatile olmadan YAPILAMAZ
-- volatile = senkronizasyon deðildir
-- volatile fazla kullanýlýrsa performans düþer
-- const + volatile birlikte kullanýmý register okumalarý için idealdir
-*/
+const uint16_t ADC_MAX = 4095;            
+const float VREF = 3.3f;                 
 
-//---------------------------------------------------------------------------------------------------------------------------------------
 
-// const Temel Kullaným
-// const ile tanýmlanan deðiþkenler deðiþtirilemez
-// STM32’de genellikle Flash bellekte tutulurlar
-const uint16_t ADC_MAX = 4095;             // 12-bit ADC maksimum deðeri
-const float VREF = 3.3f;                   // Referans voltaj
+/* --- const Olmadan --- */
 
-// const Olmadan Tanýmlama (RAM Tüketir)
-// const kullanýlmazsa deðiþken RAM’de yer kaplar
-uint16_t adcLimit = 4095;                  // RAM kullanýr, deðiþtirilebilir
+uint16_t adcLimit = 4095;                 
 
-// const ve Fonksiyon Parametreleri
-// Fonksiyon içinde parametrenin yanlýþlýkla deðiþtirilmesini önler
+
+/* --- const Parametre --- */
+
 void ProcessAdcValue(const uint16_t adcValue)
 {
-    // adcValue = 100;                      // ? Derleme hatasý
+    // adcValue deðiþtirilemez
 }
 
-// const Pointer Kullanýmý
-// 1 Pointer sabit, veri deðiþebilir
+
+/* --- const Pointer Türleri --- */
+
 uint8_t buffer1[10];
-uint8_t * const pBufferFixed = buffer1;    // Pointer adresi sabit
+uint8_t * const pBufferFixed = buffer1;   
 
-// pBufferFixed = baþka_adres;              // ? Yasak
-pBufferFixed[0] = 0x55;                    // ? Veri deðiþebilir
-
-// 2 Veri sabit, pointer deðiþebilir
 const uint8_t buffer2[10] = {0};
-const uint8_t *pReadOnly = buffer2;        // Salt okunur veri
+const uint8_t *pReadOnly = buffer2;       
 
-// pReadOnly[0] = 0xAA;                     // ? Yasak
-pReadOnly++;                               // ? Pointer baþka adrese ilerleyebilir
+const uint8_t * const pFullConst = buffer2;
 
-// 3 Hem pointer hem veri sabit
-const uint8_t * const pFullConst = buffer2; // Tam korumalý yapý
 
-// const ve Flash Tabanlý Lookup Table
-// Lookup table’lar mutlaka const olmalýdýr
-// Aksi halde RAM’i gereksiz tüketir
+/* --- Lookup Table (Flash) --- */
+
 const uint16_t sinTable[5] =
 {
-    0,
-    707,
-    1000,
-    707,
-    0
+    0, 707, 1000, 707, 0
 };
 
-// const ve Struct Kullanýmý
-// Konfigürasyon yapýlarý Flash’ta tutulur
+
+/* --- const Struct --- */
+
 typedef struct
 {
-    uint32_t baudrate;                     // UART baudrate
-    uint8_t  parity;                       // Parity ayarý
-    uint8_t  stopBits;                     // Stop bit sayýsý
+    uint32_t baudrate;
+    uint8_t  parity;
+    uint8_t  stopBits;
 } uart_config_t;
 
-// Sistem sabit konfigürasyonu
 const uart_config_t uart1Config =
 {
     .baudrate = 115200,
@@ -204,122 +187,86 @@ const uart_config_t uart1Config =
     .stopBits = 1
 };
 
-// const ve extern Kullanýmý
 
-// Header dosyasýnda:
-// extern const uint16_t ADC_MAX;
+/* --- const vs #define --- */
 
-// Bu .c dosyasýnda tanýmlanýr
-// const olduðu için Flash’ta yer alýr
-
-// const vs #define
-
-// #define › Tip güvenliði yok
 #define TIMEOUT_MS   1000
 
-// const › Tip güvenliði var, debugger’da izlenebilir
 const uint32_t TIMEOUT_MS_CONST = 1000;
 
-// Embedded Kritik Notlar 
-/*
-- const = Flash kullanýmý (RAM tasarrufu)
-- Büyük tablolar ve konfigürasyonlar mutlaka const olmalý
-- ISR içinde deðiþen deðiþkenler const OLAMAZ
-- const + volatile birlikte kullanýlabilir (örn: status register)
-*/
 
-//---------------------------------------------------------------------------------------------------------------------------------------
+/* --- static Global --- */
 
-// static Temel Kullaným (Global)
-// static global deðiþkenler SADECE tanýmlandýðý .c dosyasýnda eriþilebilirdir
-// Lifetime = program süresi, Scope = dosya ile sýnýrlý
-static uint8_t errorCounter;               // Modül içi hata sayacý
-// errorCounter baþka .c dosyalarýndan eriþilemez (extern ile bile)
-
-// static Olmadan Global Kullaným
-// static yoksa global deðiþken tüm projeye açýktýr (extern ile)
-uint8_t systemMode;                        // Tüm dosyalardan eriþilebilir
-// Header dosyasýnda:
-// extern uint8_t systemMode;
-
-// static Global ile Encapsulation
-// Driver iç durumu dýþ dünyadan gizlemek için static tercih edilir
-static uint16_t adcInternalValue;          // Sadece adc.c içinde kullanýlýr
+static uint8_t errorCounter;              
+static uint16_t adcInternalValue;         
 
 void Adc_Update(uint16_t value)
 {
-    adcInternalValue = value;              // Ýç durum güncellenir
+    adcInternalValue = value;
 }
 
-// static Local (Fonksiyon Ýçi) Kullaným
-// static local deðiþkenler stack üzerinde DEÐÝL, RAM’dedir
-// Deðerlerini fonksiyon çaðrýlarý arasýnda KORURLAR
+
+/* --- static Local --- */
+
 void ButtonHandler(void)
 {
-    static uint8_t pressCount = 0;          // Ýlk çaðrýda bir kez init edilir
-    pressCount++;                           // Fonksiyon her çaðrýldýðýnda artar
+    static uint8_t pressCount = 0;        
+    pressCount++;
 }
-// pressCount fonksiyon dýþýndan eriþilemez
-// pressCount deðeri fonksiyon bitse bile kaybolmaz
 
-// static Olmadan Local Deðiþken
+
+/* --- Normal Local --- */
+
 void ButtonHandler_Normal(void)
 {
-    uint8_t pressCount = 0;                 // Her çaðrýda yeniden oluþturulur
-    pressCount++;                           // Fonksiyon çýkýnca yok olur
+    uint8_t pressCount = 0;               
+    pressCount++;
 }
 
-// static ve ISR Senaryosu
-// ISR içinde kullanýlan static local deðiþken
+
+/* --- ISR içinde static --- */
+
 void TIM2_IRQHandler(void)
 {
-    static uint32_t tick = 0;               // ISR çaðrýlarý arasýnda korunur
-    tick++;                                 // Zaman sayacý
+    static uint32_t tick = 0;             
+    tick++;
 }
-// tick sadece bu ISR içinde bilinir
 
-// static Fonksiyon Kullanýmý
-// static fonksiyonlar sadece tanýmlandýðý .c dosyasýnda çaðrýlabilir
-// Header dosyasýna YAZILMAZ
+
+/* --- static Fonksiyon --- */
+
 static void HardwareReset(void)
 {
-    // Donaným reset iþlemleri
+    // Donaným reset
 }
 
-// static Fonksiyon Olmadan
 void SystemReset(void)
 {
-    HardwareReset();                        // Ayný dosya içinden çaðrýlabilir
-}
-// static + const Kullanýmý
-// static + const = dosya içi sabit
-// Header’a koymaya gerek yok, RAM tüketmez
-static const uint16_t adcMaxValue = 4095;   // Sadece bu modülde geçerli
-
-// static ve extern Birlikte Kullanýlamaz
-// static uint8_t data;
-// extern static uint8_t data;              // ? Mantýksal olarak anlamsýz
-
-// static › içe kapalý
-// extern › dýþa açýk
-
-// static Yanlýþ Kullaným Örnekleri
-// Gereksiz static local (okunabilirliði düþürür)
-void Calculate(void)
-{
-    static uint8_t temp;                    // ? Korunmasý gerekmiyorsa yanlýþ
-    temp = 5;
+    HardwareReset();
 }
 
-// Embedded Kritik Notlar
+
+/* --- static + const --- */
+
+static const uint16_t adcMaxValue = 4095;
+
+
+/* --- Memory Segment Perspektifi --- */
+
+// .data › initialize edilmiþ global/static
+// .bss  › initialize edilmemiþ global/static
+// stack › local deðiþkenler
+// heap  › malloc (genelde kullanýlmaz)
+
+
+/* --- Embedded Kritik Notlar --- */
+
 /*
-- static global = modül içi kapsülleme
-- static local = fonksiyon çaðrýlarý arasýnda veri koruma
-- static fonksiyon = private API
-- static RAM kullanýr, stack kullanmaz
-- ISR sayaçlarý için static local idealdir
-- Header dosyalarýnda static KULLANILMAZ (istisna: inline)
+- global deðiþkenler › tek yerde tanýmlanmalý
+- extern › paylaþým, static › izolasyon
+- volatile › ISR / donaným için zorunlu
+- const › Flash kullanýmý (RAM tasarrufu)
+- static local › state machine için ideal
+- volatile ? atomic
+- büyük veri › stack yerine static/const tercih edilmeli
 */
-
-//---------------------------------------------------------------------------------------------------------------------------------------
-

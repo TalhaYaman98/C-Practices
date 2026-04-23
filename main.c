@@ -1,99 +1,183 @@
-/*
+/* ---------- Struct ---------- */ 
 
-Gömülü sistemler için C dili pratikleri. Stm32 mikrodenetleyicileri odaklý.
-
-*/
-
-
-// STM32’ye Özgü Ama Standart Gibi Kullanýlan Baþlýklar. Bunlar C standardý deðil, STM32 ekosisteminin temelidir.
-#include "stm32f4xx.h"        // CMSIS, register tanýmlarý
-#include "stm32f4xx_hal.h"    // HAL üst seviye sürücüler
-
-
-#include <stdint.h>           // Sabit bit geniþliðinde veri tipleri
-uint8_t  rxData;             // 8-bit veri, UART/SPI için
-uint16_t adcValue;           // 12-bit ADC için güvenli taþýyýcý
-uint32_t tick;               // SysTick / timer sayaçlarý
-
-
-#include <stdbool.h>         // bool, true, false tanýmlar. C dilinde bool tipi yoktur, bu kütüphane saðlar. Bayrak mantýðýnda okunabilirliði ciddi artýrýr.
-bool systemReady;            // Sistem hazýr mý bayraðý
-
-
-#include <stddef.h>          // NULL, size_t gibi temel tanýmlar. Pointer tabanlý kodlarda gereklidir. Driver yazarken null kontrolü için sýk kullanýlýr.
-uint8_t *pBuffer = NULL;     // Pointer baþlangýçta boþ
-
-#include <string.h>          // memcpy, memset, strlen vb. DMA, buffer, frame yönetiminde sýk kullanýlýr. STM32’de stack ve performans etkisi olabilir. strcpy gibi fonksiyonlar genelde önerilmez.
-uint8_t txBuffer[10];
-memset(txBuffer, 0, sizeof(txBuffer));   // Buffer sýfýrlama
-
-
-#include <stdio.h>           // printf, sprintf vb. <stdio.h> — Standart G/Ç (Sýnýrlý Kullaným). Genellikle debug amaçlý kullanýlýr. RAM ve Flash tüketimi yüksektir. Üretim kodunda çoðu zaman kapatýlýr.
-printf("ADC: %d\n", adcValue);   // SWO veya UART debug çýktýsý
-
-
-#include <stdlib.h>          // atoi, malloc, free vb. Genel Amaçlý Yardýmcý Fonksiyonlar. Embedded projelerde çok sýnýrlý kullanýlýr. malloc / free çoðu STM32 projesinde önerilmez Fragmentation riski vardýr.
-int value = atoi("123");     // String › int dönüþümü
-
-#include <math.h>            // sqrt, sin, cos vb. Matematik Fonksiyonlarý. Sensör ve kontrol algoritmalarýnda kullanýlýr. FPU yoksa ciddi performans maliyeti vardýr. Çoðu projede sabit nokta tercih edilir.
-float rms = sqrt(25.0f);     // Karekök hesaplama
-
-
-#include <assert.h>          // assert makrosu. Geliþtirme Aþamasý Kontroller. Hata ayýklamada faydalýdýr. Debug build’te açýk Release build’te kapatýlýr
-assert(adcValue <= 4095);    // ADC sýnýr kontrolü
-
-
-#include <limits.h>          // Veri tipi min/max deðerleri. Taþma (overflow) kontrolü için kullanýlýr.
-uint8_t value;
-if (value == UCHAR_MAX)      // 8-bit maksimum deðere ulaþýldý mý
+/* struct, farklý tipteki verileri tek bir mantýksal yapý altýnda toplamak için kullanýlýr. Gömülü sistemlerde bu genellikle peripheral, sensör veya konfigürasyon modeli anlamýna gelir. */
+struct SensorData
 {
-    value = 0;               // Sayaç sýfýrlanýr
+    uint16_t raw;             // ADC’den okunan ham deðer
+    float voltage;            // Hesaplanan voltaj
+    uint8_t status;           // Sensör durumu (0: hata, 1: OK)
+};
+
+// struct Deðiþkeni Tanýmlama ve Kullanma
+struct SensorData sensor1;    // SensorData tipinde deðiþken
+
+sensor1.raw = 2000;           // Struct üyesine eriþim
+sensor1.voltage = 1.65f;      // Nokta (.) operatörü kullanýlýr
+sensor1.status = 1;           // Sensör aktif
+
+
+/* typedef ile Daha Okunabilir Struct Tanýmý. STM32 projelerinde standart kullaným þeklidir. */
+typedef struct
+{
+    uint16_t raw;             // ADC ham veri
+    float voltage;            // Voltaj deðeri
+    uint8_t status;           // Sensör durumu
+} Sensor_t;
+
+Sensor_t sensor2;             // Artýk struct keyword gerekmez
+sensor2.raw = 3000;           
+sensor2.voltage = 2.4f;       
+sensor2.status = 0;           
+
+
+/* Struct Pointer Kullanýmý (-> Operatörü). Driver ve HAL fonksiyonlarýnda en sýk kullanýlan yapý. */
+Sensor_t sensor3;             
+Sensor_t *pSensor;            
+
+pSensor = &sensor3;            // Struct adresi pointer’a atanýr
+
+pSensor->raw = 1500;           
+pSensor->voltage = 1.2f;       
+pSensor->status = 1;           
+
+
+/* Fonksiyonlara Struct Pointer Gönderme. STM32 driver mimarisinin temelidir. */
+void Sensor_Update(Sensor_t *sensor)   
+{
+    sensor->raw = 2048;                // ADC okuma simülasyonu
+    sensor->voltage = 1.65f;           // Voltaj hesaplanýr
+    sensor->status = 1;                // Sensör geçerli
 }
 
 
-#include <ctype.h>           // isdigit, isalpha vb. Karakter Kontrolleri. UART üzerinden gelen ASCII veriler için faydalýdýr.
-char rx;
-if (isdigit(rx))             // Gelen karakter rakam mý
+/* Struct Return Eden Fonksiyon. Küçük yapýlar için kullanýþlýdýr (copy maliyeti dikkate alýnmalý). */
+Sensor_t Sensor_Create(void)
 {
-    /* iþlem */
+    Sensor_t s;
+
+    s.raw = 1000;              
+    s.voltage = 0.8f;          
+    s.status = 1;              
+
+    return s;                  // Struct return edilir
 }
 
 
-#include <time.h>            // time_t tanýmý. Zaman Fonksiyonlarý (Sýnýrlý). Bare-metal STM32’de genelde kullanýlmaz. RTC + RTOS olmayan sistemlerde pratik karþýlýðý yoktur
-time_t t;                    // RTOS varsa anlamlý olabilir
-
-
-#include <errno.h>           // Hata kodlarý. POSIX benzeri katmanlarda veya middleware’de görülür.
-int err = errno;             // Son hata kodu
-
-
-#include <stdarg.h>          // va_list tanýmý. Deðiþken Argümanlý Fonksiyonlar. printf benzeri fonksiyon yazarken kullanýlýr. Debug log sistemlerinde kullanýlýr
-void Log(const char *fmt, ...)
+/* Struct Ýçinde Struct Kullanýmý (Nested Struct). Kompleks peripheral modellerinde kullanýlýr. */
+typedef struct
 {
-    /* deðiþken argüman iþleme */
+    uint16_t raw;
+    float voltage;
+} ADC_Data_t;
+
+typedef struct
+{
+    ADC_Data_t adc;            // Ýç içe struct
+    uint8_t status;
+} SensorEx_t;
+
+SensorEx_t sensorEx;
+
+sensorEx.adc.raw = 2500;       // Nested eriþim
+sensorEx.status = 1;
+
+
+/* Struct ile Peripheral Konfigürasyonu (STM32 Tarzý). HAL yapýlarýna birebir benzer örnek. */
+typedef struct
+{
+    uint32_t baudRate;         // UART baud rate
+    uint8_t dataBits;          
+    uint8_t stopBits;          
+} UART_Config_t;
+
+UART_Config_t uart1Config;
+
+uart1Config.baudRate = 115200;
+uart1Config.dataBits = 8;
+uart1Config.stopBits = 1;
+
+
+/* Struct Dizisi (Birden Fazla Sensör / Peripheral) */
+Sensor_t sensors[3];           
+
+sensors[0].raw = 1000;         
+sensors[1].raw = 2000;         
+sensors[2].raw = 3000;         
+
+
+/* Struct + Döngü Kullanýmý. Çoklu sensör tarama (scan) senaryosu */
+for (int i = 0; i < 3; i++)
+{
+    sensors[i].status = 1;     // Tüm sensörleri aktif yap
 }
 
 
-#include <signal.h>          // Sinyal tanýmlarý. Sinyaller (Nadiren). Bare-metal STM32’de neredeyse hiç kullanýlmaz.
-
-
-#include <float.h>           // Float sýnýrlarý. Sayýsal sýnýr kontrolü gereken durumlarda.
-float v;
-if (v > FLT_MAX)             // Float taþma kontrolü
+/* Struct Ýçinde Pointer Kullanýmý (DMA / Buffer Yönetimi) */
+typedef struct
 {
-    v = 0.0f;
+    uint8_t *pData;            // Veri buffer pointer
+    uint16_t size;             // Buffer boyutu
+} Buffer_t;
+
+uint8_t dataArray[10];
+
+Buffer_t buffer;
+
+buffer.pData = dataArray;      // Array adresi atanýr
+buffer.size = sizeof(dataArray);
+
+
+/* Pointer + Struct = STM32 HAL Mantýðý (Kavramsal). */
+typedef struct
+{
+    volatile uint32_t *ODR;    // Output Data Register adresi
+    volatile uint32_t *IDR;    // Input Data Register adresi
+} GPIO_Port_t;
+
+
+/* Register Map Simülasyonu */
+GPIO_Port_t gpioA;
+
+gpioA.ODR = (uint32_t*)0x40020014;   // Örnek adres (STM32 GPIOA ODR)
+gpioA.IDR = (uint32_t*)0x40020010;   // GPIOA IDR adresi
+
+*(gpioA.ODR) |= (1 << 5);            // PA5 HIGH yapýlýr (register eriþimi)
+
+
+/* Const Struct Kullanýmý (Flash'ta Sabit Konfigürasyon) */
+const UART_Config_t uartDefault =
+{
+    .baudRate = 9600,
+    .dataBits = 8,
+    .stopBits = 1
+};                                  // Deðiþtirilemez konfigürasyon
+
+
+/* Volatile Struct Kullanýmý (Interrupt ile Deðiþen Veri) */
+typedef struct
+{
+    volatile uint8_t flag;     // ISR tarafýndan deðiþtirilebilir
+    volatile uint16_t value;
+} ISR_Data_t;
+
+ISR_Data_t isrData;
+
+if (isrData.flag)             // Compiler optimizasyonu engellenir
+{
+    /* ISR tetiklenmiþ */
 }
 
 
-#include <setjmp.h>          // setjmp / longjmp. Stack Atlama (Genelde Kaçýnýlýr). Gömülü sistemlerde önerilmez.
+int main(void)
+{
+    Sensor_t mySensor;
 
+    Sensor_Update(&mySensor);   // Pointer ile güncelleme
 
-#include <stdatomic.h>       // Atomik tipler. Atomik Ýþlemler (Modern C). RTOS veya çok çekirdekli sistemlerde anlamlýdýr.
-atomic_uint flag;            // Interrupt-safe bayrak
+    Sensor_t newSensor = Sensor_Create();  // Struct return kullanýmý
 
-
-int main(int argc, char *argv[]) {
-	
-	printf("C dili pratikleri");
-	return 0;
+    while (1)
+    {
+        /* main loop */
+    }
 }

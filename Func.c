@@ -15,93 +15,179 @@ void Led_On(void);                       // LED açma iþlemini yapar
 /* --- Parametre Geçirme Örnekleri --- */
 
 // Deðer ile parametre alan fonksiyon (call by value)
-void IncreaseValue(uint16_t value);      // Gönderilen deðerin kopyasý üzerinde çalýþýr
+void IncreaseValue(uint16_t value);      
 
 // Pointer ile parametre alan fonksiyon (call by reference)
-void IncreaseValuePtr(uint16_t *value);  // Gönderilen adres üzerinden asýl deðiþkeni deðiþtirir
+void IncreaseValuePtr(uint16_t *value);  
 
 /* --- Hesaplama Fonksiyonlarý --- */
 
-// ADC ham deðerini voltaja çeviren fonksiyon
-float ConvertAdcToVoltage(uint16_t adcRaw); // ADC sayýsal deðerini V cinsine çevirir
+float ConvertAdcToVoltage(uint16_t adcRaw); 
 
 /* --- ISR / Donaným Uyumlu Fonksiyon --- */
 
-// Interrupt içinde deðiþtirilen bayraklarý temizlemek için
-void ClearUartFlag(volatile uint8_t *flag); // volatile zorunlu, donaným deðiþkeni
+void ClearUartFlag(volatile uint8_t *flag); 
+
+/* --- Pointer ile Veri Doldurma Fonksiyonu --- */
+
+// Buffer doldurma (DMA / UART RX senaryosu)
+void FillBuffer(uint8_t *buf, uint16_t size, uint8_t value); 
+
+/* --- Callback Fonksiyon Tanýmý --- */
+
+// Fonksiyon pointer typedef (HAL callback mantýðý)
+typedef void (*Callback_t)(void);
+
+void RegisterCallback(Callback_t cb);   // Callback kaydetme
+void ExecuteCallback(void);             // Callback çaðýrma
+
+/* --- Inline Fonksiyon --- */
+
+// Küçük fonksiyonlar için performans optimizasyonu
+static inline uint16_t Add(uint16_t a, uint16_t b)
+{
+    return a + b;                      // Fonksiyon çaðrýsý overhead yok
+}
 
 /* ---------- extern Fonksiyon Bildirimleri ---------- */
-/* Header dosyasýnda tanýmlanan tüm fonksiyonlar varsayýlan olarak extern'dir */
-/* Yani baþka .c dosyalarýndan çaðrýlabilirler */
 
 #endif /* FUNCTIONS_H */
 
 
 /* ==================== functions.c ======================== */
 
-#include "functions.h"                  // Kendi header dosyamýz
+#include "functions.h"
+
+/* --- Statik Global Deðiþken --- */
+
+// Sadece bu dosya içinde eriþilebilir
+static Callback_t userCallback = 0;     // Callback pointer
+
 
 /* --- Fonksiyon Tanýmý: Led_On --- */
 
-// LED yakma iþlemini yapan fonksiyon
-// Parametre almamasýnýn sebebi: LED pin bilgisi genelde makro veya global tanýmlýdýr
 void Led_On(void)
 {
-    // GPIO_SetPin(LED_PORT, LED_PIN);    // HAL/LL ile GPIO set iþlemi
-    // Bu fonksiyon donanýma doðrudan etki eder
+    // GPIO_SetPin(LED_PORT, LED_PIN); 
 }
+
 
 /* --- Call by Value Örneði --- */
 
-// Bu fonksiyona gönderilen "value", orijinal deðiþkenin kopyasýdýr
-// Fonksiyon bittiðinde yapýlan deðiþiklikler kaybolur
 void IncreaseValue(uint16_t value)
 {
-    value++;                            // Sadece yerel kopya artar
+    value++;                            // Kopya deðiþir
 }
+
 
 /* --- Call by Reference Örneði --- */
 
-// Pointer kullanýldýðý için gerçek deðiþkenin adresi ile çalýþýlýr
-// Bu yöntem gömülü sistemlerde sýklýkla tercih edilir
 void IncreaseValuePtr(uint16_t *value)
 {
-    if (value != 0)                     // Null pointer kontrolü (güvenlik)
+    if (value != 0)                     // Null kontrolü
     {
-        (*value)++;                    // Asýl deðiþken artýrýlýr
+        (*value)++;                    // Gerçek deðiþken deðiþir
     }
 }
+
 
 /* --- Fonksiyon Kullaným Senaryosu --- */
 
-// Bu fonksiyon, yukarýdaki iki yaklaþýmýn farkýný göstermek içindir
 void Example_FunctionUsage(void)
 {
-    uint16_t counter = 10;              // Yerel deðiþken, stack üzerinde
+    uint16_t counter = 10;
 
-    IncreaseValue(counter);             // counter deðiþmez (10)
-    IncreaseValuePtr(&counter);          // counter = 11 olur
+    IncreaseValue(counter);             // Deðiþmez
+    IncreaseValuePtr(&counter);         // Artar
 }
+
 
 /* --- ADC Dönüþüm Fonksiyonu --- */
 
-// ADC’den gelen ham sayýsal deðeri gerilim cinsine çevirir
-// Donanýmdan baðýmsýz saf hesaplama fonksiyonudur
 float ConvertAdcToVoltage(uint16_t adcRaw)
 {
-    const float VREF = 3.3f;            // Referans voltaj (Flash’ta tutulur)
-    return (adcRaw * VREF) / 4095.0f;    // 12-bit ADC için dönüþüm formülü
+    const float VREF = 3.3f;            
+    return (adcRaw * VREF) / 4095.0f;
 }
+
 
 /* --- ISR Uyumlu Fonksiyon --- */
 
-// UART veya timer interrupt içinde kullanýlan bayrak temizleme fonksiyonu
-// volatile kullanýmý: compiler optimizasyonunu engeller
 void ClearUartFlag(volatile uint8_t *flag)
 {
-    if (flag != 0)                      // Güvenlik kontrolü
+    if (flag != 0)
     {
-        *flag = 0;                     // Bayrak temizlenir
+        *flag = 0;
     }
 }
 
+
+/* --- Buffer Ýþleme Fonksiyonu --- */
+
+// DMA sonrasý buffer temizleme / doldurma
+void FillBuffer(uint8_t *buf, uint16_t size, uint8_t value)
+{
+    if (buf == 0) return;               // Güvenlik
+
+    for (uint16_t i = 0; i < size; i++)
+    {
+        buf[i] = value;                 // Buffer doldurulur
+    }
+}
+
+
+/* --- Callback Mekanizmasý --- */
+
+// Callback kaydetme (ör: interrupt sonrasý çalýþtýrýlacak fonksiyon)
+void RegisterCallback(Callback_t cb)
+{
+    userCallback = cb;                  // Fonksiyon adresi saklanýr
+}
+
+// Callback çalýþtýrma
+void ExecuteCallback(void)
+{
+    if (userCallback != 0)              // Null kontrolü
+    {
+        userCallback();                // Fonksiyon pointer çaðrýlýr
+    }
+}
+
+
+/* --- Static Fonksiyon (Dosya Ýçi Kullaným) --- */
+
+// Sadece bu .c dosyasýnda eriþilebilir
+static uint16_t Multiply(uint16_t a, uint16_t b)
+{
+    return a * b;
+}
+
+
+/* --- ISR Senaryosu Örneði --- */
+
+// Simüle ISR handler
+void UART_IRQHandler(void)
+{
+    static volatile uint8_t uartFlag = 1;  // ISR içinde deðiþen flag
+
+    if (uartFlag)
+    {
+        ClearUartFlag(&uartFlag);      // Flag temizlenir
+    }
+}
+
+
+/* --- Fonksiyon Pointer Kullanýmý --- */
+
+void Led_Toggle(void)
+{
+    // GPIO toggle iþlemi
+}
+
+void FunctionPointerExample(void)
+{
+    void (*funcPtr)(void);             // Fonksiyon pointer
+
+    funcPtr = Led_Toggle;              // Fonksiyon adresi atanýr
+    funcPtr();                         // Fonksiyon çaðrýlýr
+}
